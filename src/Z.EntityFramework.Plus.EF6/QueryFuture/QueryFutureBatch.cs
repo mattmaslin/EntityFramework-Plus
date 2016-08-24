@@ -11,7 +11,8 @@ using System.Data;
 using System.Data.Common;
 using System.Reflection;
 using System.Text;
-
+using System.Threading;
+using System.Threading.Tasks;
 #if EF5
 using System.Data.EntityClient;
 using System.Data.Objects;
@@ -110,6 +111,70 @@ namespace Z.EntityFramework.Plus
                         {
                             query.SetResult(createEntityDataReader);
                             reader.NextResult();
+                        }
+                    }
+#endif
+                }
+
+                Queries.Clear();
+            }
+            finally
+            {
+                if (ownConnection)
+                {
+                    connection.Close();
+                }
+            }
+        }
+
+        public async Task ExecuteQueriesAsync()
+        {
+#if EF5 || EF6
+            var connection = (EntityConnection)Context.Connection;
+#elif EFCORE
+            var connection = Context.Database.GetDbConnection();
+#endif
+            var command = CreateCommandCombined();
+
+            var ownConnection = false;
+
+            try
+            {
+                if (connection.State != ConnectionState.Open)
+                {
+                    await connection.OpenAsync();
+                    ownConnection = true;
+                }
+
+                using (command)
+                {
+#if EF5
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        foreach (var query in Queries)
+                        {
+                            query.SetResult(reader);
+                            await reader.NextResultAsync();
+                        }
+}
+#elif EF6
+                    var interceptionContext = Context.GetInterceptionContext();
+                    using (var reader = await DbInterception.Dispatch.Command.ReaderAsync(command, new DbCommandInterceptionContext(interceptionContext), default(CancellationToken)))
+                    {
+                        foreach (var query in Queries)
+                        {
+                            query.SetResult(reader);
+                            await reader.NextResultAsync();
+                        }
+                    }
+#elif EFCORE
+                    using (var reader = await command.ExecuteReaderAsync())
+                    {
+                        var createEntityDataReader = new CreateEntityDataReader(reader);
+                        foreach (var query in Queries)
+                        {
+                            query.SetResult(createEntityDataReader);
+                            await reader.NextResultAsync();
                         }
                     }
 #endif

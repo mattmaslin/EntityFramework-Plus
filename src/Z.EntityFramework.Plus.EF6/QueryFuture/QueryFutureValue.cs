@@ -6,6 +6,8 @@
 // Copyright © ZZZ Projects Inc. 2014 - 2016. All rights reserved.
 
 using System.Data.Common;
+using System.Threading;
+using System.Threading.Tasks;
 #if EF5
 using System.Data.Objects;
 
@@ -59,6 +61,17 @@ namespace Z.EntityFramework.Plus
 
                 return _result;
             }
+        }
+
+
+        public async Task<TResult> ValueAsync()
+        {
+            if (!HasValue)
+            {
+                await OwnerBatch.ExecuteQueriesAsync();
+            }
+
+            return _result;
         }
 
         /// <summary>Sets the result of the query deferred.</summary>
